@@ -36,6 +36,9 @@ class LinearUnit(nn.Module):
 
         # Combine as_1 and as_2 to form the diagonal of A
         as_combined = torch.cat((as_1, as_2), dim=0)
+        as_combined_real = as_combined.real
+        as_combined_imag = as_combined.imag
+        as_combined = torch.cat((as_combined_real, as_combined_imag), dim=0)
         A = torch.diag(as_combined)
 
         # Calculate bs1 and bs2 (ensure they are complex tensors)
@@ -48,6 +51,9 @@ class LinearUnit(nn.Module):
         z2 = (-1.0) ** z2_indices
         bs2_real = z2 * (torch.exp(2 * alpha) - torch.exp(-2 * alpha)) * torch.exp(-alpha) / self.K
         bs2 = bs2_real.type(torch.complex64)  # Convert to complex tensor
+        as_combined_imag = as_combined.imag
+        as_combined = torch.cat((as_combined_real, as_combined_imag), dim=0)
+        A = torch.diag(as_combined)
 
         bs_combined = torch.cat((bs1, bs2), dim=0).unsqueeze(1)
 
@@ -90,7 +96,14 @@ class LinearUnit(nn.Module):
             state (Tensor - batch_sz x num_units): New state of the cell.
         """
 
-        inputs_mul = inputs @ self.B_real.t() + 1j * inputs @ self.B_imag.t() # [batch_sz, num_units]
+        inputs = inputs.type(torch.complex64)
+        state = state.type(torch.complex64)
+
+        # print('dtype B', self.B_real.dtype)
+        # print('dtype inputs', inputs.dtype)
+        # print('dtype B', self.B_imag.dtype)
+
+        inputs_mul = (inputs @ self.B_real.t()).type(torch.complex64) + (1j * inputs @ self.B_imag.t()).type(torch.complex64) # [batch_sz, num_units]
 
         state_c = state[:, :self._num_units] + 1j * state[:, self._num_units:]  # [batch_sz, num_units]
 
