@@ -6,6 +6,7 @@ from problems.adding_problem import AddingProblemDataset
 from problems.copying_memory_problem import CopyingMemoryProblemDataset
 from models.tf_rnn import TFRNN
 from models.urnn_cell import URNNCell
+from models.lru_cell import LinearUnit
 
 '''
         name,
@@ -26,9 +27,6 @@ loss_path = 'results/'
 glob_learning_rate = 0.001
 glob_decay = 0.9
 
-def baseline_cm(timesteps):
-    return 10 * np.log(8) / timesteps
-
 def baseline_ap():
     return 0.167
 
@@ -40,15 +38,6 @@ def serialize_loss(loss, name):
 class Main:
     def init_data(self):
         print('Generating data...')
-
-        # init copying memory problem
-        self.cm_batch_size = 50
-        self.cm_epochs = 10
-
-        self.cm_timesteps = [120, 220, 320, 520]
-        self.cm_samples = 100000
-        self.cm_data = [CopyingMemoryProblemDataset(self.cm_samples, timesteps) for timesteps in self.cm_timesteps]
-        self.dummy_cm_data = CopyingMemoryProblemDataset(100, 50)  # samples, timestamps
 
         # init adding problem
         self.ap_batch_size = 50
@@ -71,24 +60,6 @@ class Main:
     def train_urnn_for_timestep_idx(self, idx):
         print('Initializing and training URNNs for one timestep...')
 
-        # CM
-
-        self.cm_urnn = TFRNN(
-            name="cm_urnn",
-            num_in=1,
-            num_hidden=128,
-            num_out=10,
-            num_target=1,
-            single_output=False,
-            rnn_cell=URNNCell,
-            activation_hidden=None,  # modReLU
-            activation_out=lambda x: x,
-            optimizer=lambda params: optim.RMSprop(params, lr=glob_learning_rate, alpha=glob_decay),
-            loss_function=nn.CrossEntropyLoss()
-        )
-        self.train_network(self.cm_urnn, self.cm_data[idx],
-                           self.cm_batch_size, self.cm_epochs)
-
         # AP
         self.ap_urnn = TFRNN(
             name="ap_urnn",
@@ -104,6 +75,28 @@ class Main:
             loss_function=nn.MSELoss()
         )
         self.train_network(self.ap_urnn, self.ap_data[idx],
+                           self.ap_batch_size, self.ap_epochs)
+
+        print('Init and training URNNs for one timestep done.')
+
+    def train_lru_for_timestep_idx(self, idx):
+        print('Initializing and training URNNs for one timestep...')
+
+        # AP
+        self.ap_lru = TFRNN(
+            name="lru_urnn",
+            num_in=2,
+            num_hidden=512,
+            num_out=1,
+            num_target=1,
+            single_output=True,
+            rnn_cell=LinearUnit,
+            activation_hidden=None,  # modReLU
+            activation_out=nn.ReLU(),
+            optimizer=lambda params: optim.RMSprop(params, lr=glob_learning_rate, alpha=glob_decay),
+            loss_function=nn.MSELoss()
+        )
+        self.train_network(self.ap_lru, self.ap_data[idx],
                            self.ap_batch_size, self.ap_epochs)
 
         print('Init and training URNNs for one timestep done.')
@@ -151,6 +144,8 @@ class Main:
         print('Starting training...')
 
         timesteps_idx = 4
+        for i in range(timesteps_idx):
+            self.train_lru_for_timestep_idx(i)
         for i in range(timesteps_idx):
             self.train_urnn_for_timestep_idx(i)
         for i in range(timesteps_idx):

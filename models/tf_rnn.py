@@ -2,7 +2,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from .urnn_cell import URNNCell
+from models.urnn_cell import URNNCell
+from models.lru_cell import LinearUnit
 
 def serialize_to_file(loss):
     file = open('losses.txt', 'w')
@@ -36,13 +37,21 @@ class TFRNN(nn.Module):
         # init cell
         if rnn_cell == URNNCell:
             self.cell = rnn_cell(num_units=num_hidden, num_in=num_in)
+        elif rnn_cell == LinearUnit:
+            self.cell = rnn_cell(num_units=num_hidden, num_in=num_in, seq_len=100)
         else:
             self.cell = rnn_cell(input_size=num_in, hidden_size=num_hidden, nonlinearity='tanh' if activation_hidden == nn.Tanh() else 'relu')
 
         # extract output size
-        self.output_size = num_hidden  # In PyTorch, hidden_size is used
+        self.output_size = 2*num_hidden  # In PyTorch, hidden_size is used
 
         # set up h->o parameters
+        # if model_type=='LRU':
+        #     self.mlp = nn.Sequential(
+        #         nn.Linear(hidden_size * 2, hidden_size_mlp),
+        #         nn.ReLU(),  # Only non-linearity in the model
+        #         nn.Linear(hidden_size_mlp, output_size)
+        #     )
         self.w_ho = nn.Parameter(torch.empty(num_out, self.output_size))
         nn.init.xavier_uniform_(self.w_ho)
         self.b_o = nn.Parameter(torch.zeros(num_out, 1))
@@ -186,7 +195,7 @@ class TFRNN(nn.Module):
             raise Exception('New loss function')
 
         if training:
-            loss.backward()
+            loss.backward(retain_graph=True)
             self.optimizer.step()
 
         return loss.item()
