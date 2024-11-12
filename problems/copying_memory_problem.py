@@ -17,3 +17,4 @@ class CopyingMemoryProblemDataset(Dataset):
         Y = np.zeros((num_samples, self.sample_len, 1))
         Y[:, -10:] = X[:, :10]
         return X, Y
+
