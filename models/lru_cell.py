@@ -10,7 +10,8 @@ class LinearUnit(nn.Module):
         super(LinearUnit, self).__init__()
         # save class variables
         self.num_in = num_in
-        self.S = num_units
+        self.S = num_units//2
+        self.num_units = num_units
         self.hidden_size = num_units
         self.K = seq_len
 
@@ -22,53 +23,45 @@ class LinearUnit(nn.Module):
         self.K = torch.tensor(self.K, dtype=torch.float32) if not isinstance(self.K, torch.Tensor) else self.K
 
         # Calculate as_1 and as_2 (complex tensors)
-        radius1 = torch.exp(-alpha / self.K)
-        start1 = -torch.pi * self.S / (2 * self.K)
-        end1 = torch.pi * self.S / (2 * self.K)
-        phases1 = torch.linspace(start=start1, end=end1, steps=self.S)
-        as_1 = radius1 * torch.exp(1j * phases1)
+        radius = torch.exp(-alpha / self.K)
+        start = -torch.pi * self.S / (2 * self.K)
+        end = torch.pi * self.S / (2 * self.K)
+        phases = torch.linspace(start=start, end=end, steps=self.S)
+        # phases = torch.linspace(start=-torch.pi/10, end=torch.pi/10, steps=self.S)
+        as_1 = radius * torch.exp(1j * phases)  # as_1 est un tenseur complexe de taille (S,)
 
-        radius2 = torch.exp(-alpha / (self.K / 2))
-        start2 = -torch.pi * self.S / self.K
-        end2 = torch.pi * self.S / self.K
-        phases2 = torch.linspace(start=start2, end=end2, steps=self.S)
-        as_2 = radius2 * torch.exp(1j * phases2)
+        # Génération de bs1
+        z1 = (-1.0) ** torch.arange(-self.S / 2, self.S / 2)
+        bs1 = z1 * (torch.exp(2 * alpha) - torch.exp(-2 * alpha)) * torch.exp(-alpha) / (2 * self.K)  # bs1 est réel de taille (S,)
 
-        # Combine as_1 and as_2 to form the diagonal of A
-        as_combined = torch.cat((as_1, as_2), dim=0)
-        as_combined_real = as_combined.real
-        as_combined_imag = as_combined.imag
-        as_combined = torch.cat((as_combined_real, as_combined_imag), dim=0)
-        A = torch.diag(as_combined)
+        # Génération de as_2
+        radius = torch.exp(-alpha / (self.K / 2))
+        start = -torch.pi * self.S / self.K
+        end = torch.pi * self.S / self.K
+        # phases = torch.linspace(start=-torch.pi/10, end=torch.pi/10, steps=self.S)
+        phases = torch.linspace(start=start, end=end, steps=self.S)
+        as_2 = radius * torch.exp(1j * phases)  # as_2 est un tenseur complexe de taille (S,)
 
-        # Calculate bs1 and bs2 (ensure they are complex tensors)
-        z1_indices = torch.arange(-self.S / 2, self.S / 2)
-        z1 = (-1.0) ** z1_indices
-        bs1_real = z1 * (torch.exp(2 * alpha) - torch.exp(-2 * alpha)) * torch.exp(-alpha) / (2 * self.K)
-        bs1 = bs1_real.type(torch.complex64)  # Convert to complex tensor with zero imaginary part
+        z2 = (-1.0) ** torch.arange(-self.S / 2, self.S / 2)
+        bs2 = z2 * (torch.exp(2 * alpha) - torch.exp(-2 * alpha)) * torch.exp(-alpha) / self.K  # bs2 est réel de taille (S,)
 
-        z2_indices = torch.arange(-self.S / 2, self.S / 2)
-        z2 = (-1.0) ** z2_indices
-        bs2_real = z2 * (torch.exp(2 * alpha) - torch.exp(-2 * alpha)) * torch.exp(-alpha) / self.K
-        bs2 = bs2_real.type(torch.complex64)  # Convert to complex tensor
-        as_combined_imag = as_combined.imag
-        as_combined = torch.cat((as_combined_real, as_combined_imag), dim=0)
-        A = torch.diag(as_combined)
+        as_ = torch.cat((as_1, as_2), dim=0)  # Taille (2S,)
 
-        bs_combined = torch.cat((bs1, bs2), dim=0).unsqueeze(1)
+        bs = torch.cat((bs1, bs2), dim=0)  # Taille (2S,)
+        print('as shape', as_.shape)
+        print('bs shape', bs.shape)
 
-        B = torch.cat((bs_combined, bs_combined), dim=1)
 
-        # Now B is a complex tensor, and you can access B.real and B.imag
-        A_real = A.real
-        A_imag = A.imag
-        B_real = B.real
-        B_imag = B.imag
+        as_real = as_.real  # Taille (2S,)
+        as_imag = as_.imag  # Taille (2S,)
 
-        self.A_real = nn.Parameter(A_real)
-        self.A_imag = nn.Parameter(A_imag)
-        self.B_real = nn.Parameter(B_real)
-        self.B_imag = nn.Parameter(B_imag)
+        self.as_real = nn.Parameter(as_real)
+        self.as_imag = nn.Parameter(as_imag)
+
+        bs_real = bs.real  # Taille (2S,)
+        bs_imag = torch.zeros_like(bs_real)  # Taille (2S,)
+        self.bs_real = nn.Parameter(bs_real)
+        self.bs_imag = nn.Parameter(bs_imag)
 
     
     @property
@@ -96,20 +89,25 @@ class LinearUnit(nn.Module):
             state (Tensor - batch_sz x num_units): New state of the cell.
         """
 
-        inputs = inputs.type(torch.complex64)
-        state = state.type(torch.complex64)
-
         # print('dtype B', self.B_real.dtype)
         # print('dtype inputs', inputs.dtype)
         # print('dtype B', self.B_imag.dtype)
+        print('state shape', state.shape)
+        print('inputs shape', inputs.shape)
 
-        inputs_mul = (inputs @ self.B_real.t()).type(torch.complex64) + (1j * inputs @ self.B_imag.t()).type(torch.complex64) # [batch_sz, num_units]
+        A_diagonal = torch.cat((self.as_real[:self.S], self.as_imag[:self.S]), dim=0)  # Taille (2S,)
+        A = torch.diag(A_diagonal)  # Taille (2S, 2S)
+        print('A shape', A.shape)
 
-        state_c = state[:, :self._num_units] + 1j * state[:, self._num_units:]  # [batch_sz, num_units]
+        bs_column = torch.cat((self.bs_real[:self.S], self.bs_imag[:self.S]), dim=0).unsqueeze(1)  # Taille (2S, 1)
+        B = torch.cat((bs_column, bs_column), dim=1)  # Taille (2S, 2)
+        print('B shape', B.shape)
+        inputs_mul = inputs @ B.t() 
+        inputs_mul_c = inputs_mul[:, :self.S] + 1j * inputs_mul[:, self.S:]  # [batch_sz, num_units]
+        state_mul = state @ A.t()  # [batch_sz, num_units]
+        state_mul_c = state_mul[:, :self.S] + 1j * state_mul[:, self.S:]  # [batch_sz, num_units]
 
-        state_mul = self.A_real.mul(state_c) + 1j * self.A_imag.mul(state_c) # [batch_sz, num_units]
-
-        new_state_c = inputs_mul + state_mul # [batch_sz, num_units], complex
+        new_state_c = inputs_mul_c + state_mul_c # [batch_sz, num_units], complex
         new_state = torch.cat([new_state_c.real, new_state_c.imag], dim=1)  # [batch_sz, 2*num_units], real
 
         # outside network (last dense layer) is ready for 2*num_units -> num_out

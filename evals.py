@@ -86,7 +86,7 @@ class Main:
         self.ap_lru = TFRNN(
             name="lru_urnn",
             num_in=2,
-            num_hidden=512,
+            num_hidden=64,
             num_out=1,
             num_target=1,
             single_output=True,
@@ -96,10 +96,11 @@ class Main:
             optimizer=lambda params: optim.RMSprop(params, lr=glob_learning_rate, alpha=glob_decay),
             loss_function=nn.MSELoss()
         )
+        print('as init', self.ap_lru.cell.as_real + 1j * self.ap_lru.cell.as_imag)
         self.train_network(self.ap_lru, self.ap_data[idx],
                            self.ap_batch_size, self.ap_epochs)
 
-        print('Init and training URNNs for one timestep done.')
+        print('Init and training LRU for one timestep done.')
 
     def train_rnn_lstm_for_timestep_idx(self, idx):
         print('Initializing and training RNN&LSTM for one timestep...')
