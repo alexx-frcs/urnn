@@ -116,16 +116,18 @@ class URNNCell(nn.Module):
         """The most basic URNN cell.
         Args:
             inputs (Tensor - batch_sz x num_in): One batch of cell input.
-            state (Tensor - batch_sz x num_units): Previous cell state: COMPLEX
+            state (Tensor - batch_sz x 2*num_units): Previous cell state REAL
         Returns:
         A tuple (outputs, state):
             outputs (Tensor - batch_sz x num_units*2): Cell outputs on the whole batch.
-            state (Tensor - batch_sz x num_units): New state of the cell.
+            state (Tensor - batch_sz x num_units*2): New state of the cell.
         """
         # prepare input linear combination
         inputs_mul = inputs @ self.w_ih.t()  # [batch_sz, 2*num_units]
         inputs_mul_c = inputs_mul[:, :self._num_units] + 1j * inputs_mul[:, self._num_units:]  # [batch_sz, num_units]
         
+        # print('state shape', state.shape)
+        # print('inputs shape', inputs.shape)
         # prepare state linear combination (always complex!)
         state_c = state[:, :self._num_units] + 1j * state[:, self._num_units:]  # [batch_sz, num_units]
 

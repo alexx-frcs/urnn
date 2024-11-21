@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
+import matplotlib.pyplot as plt
 from problems.adding_problem import AddingProblemDataset
 from problems.copying_memory_problem import CopyingMemoryProblemDataset
 from models.tf_rnn import TFRNN
@@ -44,7 +45,9 @@ class Main:
         self.ap_epochs = 10
 
         self.ap_timesteps = [100, 200, 400, 750]
+        # self.ap_timesteps = [750]
         self.ap_samples = [30000, 50000, 40000, 100000]
+        # self.ap_samples = [100000]
         self.ap_data = [AddingProblemDataset(sample, timesteps) for timesteps, sample in zip(self.ap_timesteps, self.ap_samples)]
         self.dummy_ap_data = AddingProblemDataset(100, 50)  # samples, timestamps
         print('Done.')
@@ -86,7 +89,7 @@ class Main:
         self.ap_lru = TFRNN(
             name="lru_urnn",
             num_in=2,
-            num_hidden=64,
+            num_hidden=512,
             num_out=1,
             num_target=1,
             single_output=True,
@@ -96,7 +99,7 @@ class Main:
             optimizer=lambda params: optim.RMSprop(params, lr=glob_learning_rate, alpha=glob_decay),
             loss_function=nn.MSELoss()
         )
-        print('as init', self.ap_lru.cell.as_real + 1j * self.ap_lru.cell.as_imag)
+        # print('as init', self.ap_lru.cell.as_real + 1j * self.ap_lru.cell.as_imag)
         self.train_network(self.ap_lru, self.ap_data[idx],
                            self.ap_batch_size, self.ap_epochs)
 
@@ -107,21 +110,21 @@ class Main:
 
         # AP
 
-        self.ap_simple_rnn = TFRNN(
-            name="ap_simple_rnn",
-            num_in=2,
-            num_hidden=128,
-            num_out=1,
-            num_target=1,
-            single_output=True,
-            rnn_cell=nn.RNNCell,
-            activation_hidden=nn.Tanh(),
-            activation_out=lambda x: x,
-            optimizer=lambda params: optim.RMSprop(params, lr=glob_learning_rate, alpha=glob_decay),
-            loss_function=nn.MSELoss()
-        )
-        self.train_network(self.ap_simple_rnn, self.ap_data[idx],
-                           self.ap_batch_size, self.ap_epochs)
+        # self.ap_simple_rnn = TFRNN(
+        #     name="ap_simple_rnn",
+        #     num_in=2,
+        #     num_hidden=128,
+        #     num_out=1,
+        #     num_target=1,
+        #     single_output=True,
+        #     rnn_cell=nn.RNNCell,
+        #     activation_hidden=nn.Tanh(),
+        #     activation_out=lambda x: x,
+        #     optimizer=lambda params: optim.RMSprop(params, lr=glob_learning_rate, alpha=glob_decay),
+        #     loss_function=nn.MSELoss()
+        # )
+        # self.train_network(self.ap_simple_rnn, self.ap_data[idx],
+        #                    self.ap_batch_size, self.ap_epochs)
 
         self.ap_lstm = TFRNN(
             name="ap_lstm",
@@ -145,12 +148,31 @@ class Main:
         print('Starting training...')
 
         timesteps_idx = 4
-        for i in range(timesteps_idx):
-            self.train_lru_for_timestep_idx(i)
-        for i in range(timesteps_idx):
-            self.train_urnn_for_timestep_idx(i)
+        # for i in range(timesteps_idx):
+        #     self.train_lru_for_timestep_idx(i)
+        # for i in range(timesteps_idx):
+        #     self.train_urnn_for_timestep_idx(i)
+        #     fig = plt.figure()
+
+        #     # plot loss
+        #     ax = fig.add_subplot(111)
+        #     ax.plot(self.ap_urnn.get_loss_list())
+        #     ax.set_title('Loss for URNN with ' + str(self.ap_timesteps[i]) + ' timesteps')
+        #     ax.set_xlabel('Batch')
+        #     ax.set_ylabel('Loss')
+        #     plt.show()
+
         for i in range(timesteps_idx):
             self.train_rnn_lstm_for_timestep_idx(i)
+            fig = plt.figure()
+
+            # plot loss
+            ax = fig.add_subplot(111)
+            ax.plot(self.ap_urnn.get_loss_list())
+            ax.set_title('Loss for URNN with ' + str(self.ap_timesteps[i]) + ' timesteps')
+            ax.set_xlabel('Batch')
+            ax.set_ylabel('Loss')
+            plt.show()
 
         print('Done and done.')
 

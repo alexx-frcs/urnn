@@ -12,7 +12,7 @@ class LinearUnit(nn.Module):
         self.num_in = num_in
         self.S = num_units//2
         self.num_units = num_units
-        self.hidden_size = num_units
+        self.hidden_size = 2*num_units
         self.K = seq_len
 
 
@@ -27,7 +27,7 @@ class LinearUnit(nn.Module):
         start = -torch.pi * self.S / (2 * self.K)
         end = torch.pi * self.S / (2 * self.K)
         phases = torch.linspace(start=start, end=end, steps=self.S)
-        # phases = torch.linspace(start=-torch.pi/10, end=torch.pi/10, steps=self.S)
+        # phases = torch.linspace(start=-torch.pi/15, end=torch.pi/15, steps=self.S)
         as_1 = radius * torch.exp(1j * phases)  # as_1 est un tenseur complexe de taille (S,)
 
         # Génération de bs1
@@ -48,8 +48,6 @@ class LinearUnit(nn.Module):
         as_ = torch.cat((as_1, as_2), dim=0)  # Taille (2S,)
 
         bs = torch.cat((bs1, bs2), dim=0)  # Taille (2S,)
-        print('as shape', as_.shape)
-        print('bs shape', bs.shape)
 
 
         as_real = as_.real  # Taille (2S,)
@@ -92,20 +90,26 @@ class LinearUnit(nn.Module):
         # print('dtype B', self.B_real.dtype)
         # print('dtype inputs', inputs.dtype)
         # print('dtype B', self.B_imag.dtype)
-        print('state shape', state.shape)
-        print('inputs shape', inputs.shape)
+        state_c = state[:, :self.num_units] + 1j * state[:, self.num_units:]  # [batch_sz, num_units]
+        state_mul = torch.cat((state_c, state_c), dim=1)  # [batch_sz, 2*num_units], complex
 
-        A_diagonal = torch.cat((self.as_real[:self.S], self.as_imag[:self.S]), dim=0)  # Taille (2S,)
+        A_diagonal = torch.cat((self.as_real, self.as_imag), dim=0)  # Taille (2S,)
         A = torch.diag(A_diagonal)  # Taille (2S, 2S)
-        print('A shape', A.shape)
+        A = A.to(torch.complex64)
+        # print('A', A.shape)
 
-        bs_column = torch.cat((self.bs_real[:self.S], self.bs_imag[:self.S]), dim=0).unsqueeze(1)  # Taille (2S, 1)
+        bs_column = torch.cat((self.bs_real, self.bs_imag), dim=0).unsqueeze(1)  # Taille (2S, 1)
+        # print('bs_column', bs_column.shape)
         B = torch.cat((bs_column, bs_column), dim=1)  # Taille (2S, 2)
-        print('B shape', B.shape)
+        # print('B', B.shape)
+        # print('inputs', inputs.shape)
         inputs_mul = inputs @ B.t() 
-        inputs_mul_c = inputs_mul[:, :self.S] + 1j * inputs_mul[:, self.S:]  # [batch_sz, num_units]
-        state_mul = state @ A.t()  # [batch_sz, num_units]
-        state_mul_c = state_mul[:, :self.S] + 1j * state_mul[:, self.S:]  # [batch_sz, num_units]
+        # print(inputs_mul[:, :self.S].shape)
+        # print(inputs_mul[:, self.S:].shape)
+        inputs_mul_c = inputs_mul[:, :self.num_units] + 1j * inputs_mul[:, self.num_units:]  # [batch_sz, num_units]
+
+        state_mul = state_mul @ A.t()  # [batch_sz, 2*num_units]
+        state_mul_c = state_mul[:, :self.num_units] + 1j * state_mul[:, self.num_units:]  # [batch_sz, num_units]
 
         new_state_c = inputs_mul_c + state_mul_c # [batch_sz, num_units], complex
         new_state = torch.cat([new_state_c.real, new_state_c.imag], dim=1)  # [batch_sz, 2*num_units], real

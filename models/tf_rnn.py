@@ -39,6 +39,8 @@ class TFRNN(nn.Module):
             self.cell = rnn_cell(num_units=num_hidden, num_in=num_in)
         elif rnn_cell == LinearUnit:
             self.cell = rnn_cell(num_units=num_hidden, num_in=num_in, seq_len=100)
+        elif rnn_cell == nn.LSTMCell:
+            self.cell = rnn_cell(input_size=num_in, hidden_size=num_hidden)
         else:
             self.cell = rnn_cell(input_size=num_in, hidden_size=num_hidden, nonlinearity='tanh' if activation_hidden == nn.Tanh() else 'relu')
 
@@ -52,7 +54,7 @@ class TFRNN(nn.Module):
         #         nn.ReLU(),  # Only non-linearity in the model
         #         nn.Linear(hidden_size_mlp, output_size)
         #     )
-        self.w_ho = nn.Parameter(torch.empty(num_out, num_hidden))
+        self.w_ho = nn.Parameter(torch.empty(num_out, 2*num_hidden))
         nn.init.xavier_uniform_(self.w_ho)
         self.b_o = nn.Parameter(torch.zeros(num_out, 1))
 
@@ -149,7 +151,6 @@ class TFRNN(nn.Module):
                           "|Batch:", '{0:3d}'.format(batch_idx),
                           "|TotalExamples:", '{0:5d}'.format(total_examples),  # total training examples
                           "|BatchLoss:", '{0:8.4f}'.format(batch_loss))
-            print('as ', self.cell.as_real + 1j*self.cell.as_imag)
 
             # validate after each epoch
             validation_loss = self.evaluate(X_val, Y_val)
